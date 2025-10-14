@@ -1,16 +1,12 @@
 {
-  "name": "aviator-pascoalwise",
+  "name": "pascoal-wise-predictor",
   "version": "1.0.0",
-  "description": "Pascoal Wise Predictor - manual history, high-precision predictor",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
-  },
-  "engines": {
-    "node": ">=18"
+    "express": "^4.19.2"
   }
 }
