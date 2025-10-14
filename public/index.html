@@ -1,35 +1,94 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aviator Palpites Inteligente</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pascoal Wise Predictor</title>
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.2/dist/tesseract.min.js"></script>
 </head>
 <body>
-  <div class="container">
-    <h1>✈️ Aviator Palpites Inteligente</h1>
-
-    <div class="upload-section">
-      <input type="file" id="imageInput" accept="image/*" />
-      <button id="uploadBtn">Carregar histórico</button>
+  <header class="topbar">
+    <div class="title">
+      <span>✈️</span>
+      <h1>Pascoal Wise Predictor</h1>
     </div>
-
-    <div id="resultados"></div>
-
-    <button id="gerarBtn">🎯 Gerar Palpite</button>
-
-    <div class="palpite-box">
-      <p id="palpiteTexto">Aguardando imagem...</p>
+    <div class="rightlinks">
+      <a href="https://games.elephantbet.co.ao/LaunchGame" target="_blank" rel="noopener">Abrir Aviator</a>
     </div>
+  </header>
 
-    <div class="feedback">
-      <button id="acertouBtn">✅ Acertou</button>
-      <button id="errouBtn">❌ Errou</button>
-    </div>
-  </div>
+  <main class="wrap">
+    <!-- HISTÓRICO MANUAL -->
+    <section class="card" id="historyCard">
+      <h2>📥 Histórico (manual)</h2>
+      <p class="muted">Cole os últimos valores (um por linha) ou adicione valores isolados. Ex.: 1.23</p>
+
+      <textarea id="historyTextarea" placeholder="Ex: 1.23&#10;2.05&#10;3.50" rows="6"></textarea>
+
+      <div class="row">
+        <button id="loadHistoryBtn">Carregar histórico</button>
+        <input id="singleValue" type="number" step="0.01" placeholder="Adicionar valor (ex: 2.05)" />
+        <button id="addSingleBtn">Adicionar</button>
+        <button id="clearHistoryBtn" class="warn">Limpar</button>
+      </div>
+
+      <div id="loadedInfo" class="info">Nenhum histórico carregado.</div>
+    </section>
+
+    <!-- PALPITES -->
+    <section class="card" id="predictCard">
+      <h2>🎯 Gerar Palpite</h2>
+      <p class="muted">Gera um palpite com base no histórico carregado. A precisão adapta conforme o teu feedback.</p>
+
+      <div class="center">
+        <button id="generateBtn" class="primary">Gerar Palpite</button>
+      </div>
+
+      <div id="palpiteBox" class="palpiteBox hidden">
+        <div id="palpiteText" class="palpiteText">—</div>
+
+        <div class="feedbackRow">
+          <button id="confirmRight" class="ok">✅ Acertou</button>
+          <button id="confirmWrong" class="bad">❌ Errou</button>
+        </div>
+      </div>
+
+      <div id="manualRealBox" class="hidden">
+        <p>Informe o valor real que caiu:</p>
+        <input id="realInput" type="number" step="0.01" placeholder="Ex: 2.35" />
+        <button id="submitReal">Enviar valor real</button>
+      </div>
+
+      <div class="stats">
+        <table>
+          <tr><th>Gerados</th><th>Acertos</th><th>Erros</th><th>Precisão aprox.</th></tr>
+          <tr>
+            <td id="stat_total">0</td>
+            <td id="stat_right">0</td>
+            <td id="stat_wrong">0</td>
+            <td id="stat_prec">0%</td>
+          </tr>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- HISTÓRICO VISUAL -->
+    <section class="card" id="historyVisual">
+      <h2>🔎 Histórico utilizado (últimos valores)</h2>
+      <div id="historyList" class="historyList">Nenhum valor.</div>
+      <div class="row" style="margin-top:8px;">
+        <button id="downloadBtn">Exportar (JSON)</button>
+        <button id="importBtn">Importar JSON</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <p>© 2025 Pascoal Wise Predictor — Made by Pascoal Wise</p>
+  </footer>
 
   <script src="script.js"></script>
 </body>
-</html>
+  </html>
