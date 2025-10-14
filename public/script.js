@@ -1,389 +1,294 @@
-// public/script.js (versão robusta: OCR parsing + edição + preditor ponderado + aprendizado)
-// Requer tesseract.js no index.html (CDN ou local) — index.html já tem <script src="...tesseract.min.js">
+/* Pascoal Wise Predictor - manual history, high-precision predictor
+   - User inputs history manually (textarea or single add)
+   - Predictor uses recency-weighted quantiles to output a conservative palpite
+   - User marks Acertou or Errou; errors with real value are added to history (learning)
+   - Stats saved in localStorage
+*/
 
-/* ---------------- CONFIG ---------------- */
-const MAX_KEEP = 300;          // quantos valores manter no histórico local
-const RECENT_MAX = 100;        // quantas últimas rodadas considerar para pesos
-const MIN_VALUE = 1.0;         // menor valor plausível
-const MAX_VALUE = 10000.0;     // maior valor plausível
-const DEFAULT_PRECISION = 0.97;// meta de precisão (não garante, serve para modelagem)
-const STORAGE_KEY = "pw_hist_values_v2";
+// -------- CONFIG ----------
+const STORAGE_KEY_VALUES = "pw_values_v3";
+const STORAGE_KEY_STATS = "pw_stats_v3";
+const MAX_KEEP = 1000;
+const RECENT_MAX = 200;
+const MIN_VAL = 1.0;
+const MAX_VAL = 10000.0;
+const TARGET_PRECISION = 0.97; // desired behavior (algorithm uses heuristics to aim here)
 
-/* ---------------- HELPERS ---------------- */
-function el(id) { return document.getElementById(id); }
+// -------- HELPERS ----------
+const $ = id => document.getElementById(id);
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+function saveJSON(key, obj){ localStorage.setItem(key, JSON.stringify(obj)); }
+function loadJSON(key, def){ try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : def; } catch(e){ return def; } }
 
-function saveValues(arr) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(-MAX_KEEP)));
-}
-
-function loadValues() {
-  try {
-    const s = localStorage.getItem(STORAGE_KEY);
-    if (!s) return [];
-    const a = JSON.parse(s);
-    return Array.isArray(a) ? a : [];
-  } catch (e) { return []; }
-}
-
-function toNumberRaw(raw) {
-  if (typeof raw !== "string") raw = String(raw);
-  raw = raw.replace(/\s/g, "");
-  raw = raw.replace(/,/g, ".");            // 1,23 -> 1.23
-  raw = raw.replace(/x$/i, "");            // remove trailing x
-  raw = raw.replace(/[^\d.]/g, "");        // keep digits and dot
-  if (!raw) return NaN;
-  const n = parseFloat(raw);
-  return isFinite(n) ? n : NaN;
-}
-
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-/* Weighted quantile implementation */
-function weightedQuantile(values, weights, q) {
+// weighted quantile
+function weightedQuantile(values, weights, q){
   if (!values || values.length === 0) return null;
-  const items = values.map((v, i) => ({ v, w: weights[i] || 1 }));
-  items.sort((a,b) => a.v - b.v);
-  const total = items.reduce((s,x) => s + x.w, 0);
+  const items = values.map((v,i)=>({v, w:weights[i]||1}));
+  items.sort((a,b)=> a.v - b.v);
+  const total = items.reduce((s,x)=>s+x.w,0);
   let cum = 0;
-  for (let it of items) {
+  for (let it of items){
     cum += it.w;
-    if (cum / total >= q) return it.v;
+    if (cum/total >= q) return it.v;
   }
-  return items[items.length - 1].v;
+  return items[items.length-1].v;
 }
-
-function recencyWeights(n, lambda = 0.07) {
-  // more recent entries have larger weight
-  const w = [];
-  for (let i = 0; i < n; i++) {
-    // i=0 oldest, i=n-1 newest -> weight exp(-lambda*(n-1-i))
-    w.push(Math.exp(-lambda * (n - 1 - i)));
+function recencyWeights(n, lambda=0.08){
+  const arr=[];
+  for (let i=0;i<n;i++){
+    arr.push(Math.exp(-lambda*(n-1-i)));
   }
-  return w;
+  return arr;
 }
 
-/* ------------ UI helpers ------------- */
-const resultadosDiv = el("resultados");
-const palpiteDisplay = el("palpiteDisplay") || null; // optional
-// We will render parsed values into resultadosDiv
-
-/* ---------------- STATE ---------------- */
-let parsedValues = loadValues();     // array of numbers (historic values)
-let history = [];                    // palpite history {hora,palpite,resultado,real}
-let pendingIndex = null;             // index of last pending in history
-
-/* Render parsed value list with edit/remove */
-function renderParsedValues() {
-  resultadosDiv.innerHTML = "";
-  const container = document.createElement("div");
-  container.style.textAlign = "left";
-  container.style.padding = "8px";
-  container.style.color = "#ffe6ff";
-
-  const title = document.createElement("div");
-  title.innerHTML = `<strong>Valores extraídos (últimos ${parsedValues.length}):</strong>`;
-  container.appendChild(title);
-
-  const list = document.createElement("ol");
-  parsedValues.slice().reverse().forEach((v, idx) => {
-    const li = document.createElement("li");
-    li.style.margin = "6px 0";
-    li.innerHTML = `<span style="display:inline-block;width:110px">${v}x</span>`;
-    const btnDel = document.createElement("button");
-    btnDel.textContent = "Remover";
-    btnDel.style.marginLeft = "8px";
-    btnDel.onclick = () => {
-      // remove this value from parsedValues (reverse index)
-      const realIdx = parsedValues.length - 1 - idx;
-      parsedValues.splice(realIdx, 1);
-      saveValues(parsedValues);
-      renderParsedValues();
-    };
-    const btnEdit = document.createElement("button");
-    btnEdit.textContent = "Editar";
-    btnEdit.style.marginLeft = "6px";
-    btnEdit.onclick = () => {
-      const newVal = prompt("Editar valor (x):", String(v));
-      const n = toNumberRaw(newVal);
-      if (isFinite(n) && n >= MIN_VALUE && n <= MAX_VALUE) {
-        const realIdx = parsedValues.length - 1 - idx;
-        parsedValues[realIdx] = Number(n.toFixed(2));
-        saveValues(parsedValues);
-        renderParsedValues();
-      } else alert("Valor inválido");
-    };
-    li.appendChild(btnEdit);
-    li.appendChild(btnDel);
-    list.appendChild(li);
-  });
-  container.appendChild(list);
-
-  // allow manual add
-  const addRow = document.createElement("div");
-  addRow.style.marginTop = "10px";
-  addRow.innerHTML = `Adicionar manual: <input id="pv_add" style="width:120px;padding:6px" placeholder="ex: 3.45" /> `;
-  const btnAdd = document.createElement("button");
-  btnAdd.textContent = "Adicionar";
-  btnAdd.onclick = () => {
-    const v = document.getElementById("pv_add").value;
-    const n = toNumberRaw(v);
-    if (!isFinite(n) || n < MIN_VALUE || n > MAX_VALUE) return alert("Valor inválido");
-    parsedValues.push(Number(n.toFixed(2)));
-    saveValues(parsedValues);
-    renderParsedValues();
-    document.getElementById("pv_add").value = "";
-  };
-  addRow.appendChild(btnAdd);
-
-  // use values button (explicit)
-  const useBtn = document.createElement("button");
-  useBtn.textContent = "Usar estes valores para gerar palpites";
-  useBtn.style.display = "block";
-  useBtn.style.marginTop = "12px";
-  useBtn.onclick = () => {
-    if (parsedValues.length === 0) return alert("Não há valores para usar.");
-    alert(`Usando ${parsedValues.length} valores para gerar palpites.`);
-  };
-
-  container.appendChild(addRow);
-  container.appendChild(useBtn);
-
-  resultadosDiv.appendChild(container);
+// normalise input string to number
+function parseNumberRaw(s){
+  if (s === null || s === undefined) return NaN;
+  s = String(s).trim();
+  if (!s) return NaN;
+  s = s.replace(/,/g, '.').replace(/[^\d.]/g,'');
+  const v = parseFloat(s);
+  return isNaN(v) ? NaN : v;
 }
 
-/* ------------- OCR parsing -------------- */
-async function processImageFile(file) {
-  resultadosDiv.innerHTML = `<div style="color:#ffd">⏳ Iniciando OCR... aguarde</div>`;
+// -------- STATE ----------
+let values = loadJSON(STORAGE_KEY_VALUES, []); // numeric array
+let stats = loadJSON(STORAGE_KEY_STATS, { total:0, right:0, wrong:0 });
+renderAll();
+
+// -------- DOM refs ----------
+const ta = $("historyTextarea");
+const loadHistoryBtn = $("loadHistoryBtn");
+const addSingleBtn = $("addSingleBtn");
+const singleValue = $("singleValue");
+const clearHistoryBtn = $("clearHistoryBtn");
+const loadedInfo = $("loadedInfo");
+
+const generateBtn = $("generateBtn");
+const palpiteBox = $("palpiteBox");
+const palpiteText = $("palpiteText");
+const confirmRight = $("confirmRight");
+const confirmWrong = $("confirmWrong");
+const manualRealBox = $("manualRealBox");
+const realInput = $("realInput");
+const submitReal = $("submitReal");
+
+const histList = $("historyList");
+const stat_total = $("stat_total");
+const stat_right = $("stat_right");
+const stat_wrong = $("stat_wrong");
+const stat_prec = $("stat_prec");
+
+let currentPrediction = null; // { value, category, hora }
+let historyLog = loadJSON("pw_history_log_v3", []);
+
+// -------- UI actions ----------
+loadHistoryBtn.addEventListener("click", () => {
+  const raw = ta.value.trim();
+  if (!raw) return alert("Cole ou digite valores no campo de histórico.");
+  const lines = raw.split(/\r?\n/).map(r=>r.trim()).filter(r=>r.length>0);
+  let added = 0;
+  for (let l of lines){
+    const n = parseNumberRaw(l);
+    if (!isNaN(n) && n >= MIN_VAL && n <= MAX_VAL){
+      values.push(Number(n.toFixed(2)));
+      added++;
+    }
+  }
+  values = values.slice(-MAX_KEEP);
+  saveJSON(STORAGE_KEY_VALUES, values);
+  renderAll();
+  alert(`✅ ${added} valores adicionados ao histórico.`);
+});
+
+addSingleBtn.addEventListener("click", () => {
+  const n = parseNumberRaw(singleValue.value);
+  if (isNaN(n) || n < MIN_VAL || n > MAX_VAL) return alert("Valor inválido.");
+  values.push(Number(n.toFixed(2)));
+  values = values.slice(-MAX_KEEP);
+  saveJSON(STORAGE_KEY_VALUES, values);
+  singleValue.value = "";
+  renderAll();
+});
+
+clearHistoryBtn.addEventListener("click", () => {
+  if (!confirm("Limpar todo o histórico local?")) return;
+  values = [];
+  saveJSON(STORAGE_KEY_VALUES, values);
+  renderAll();
+});
+
+generateBtn.addEventListener("click", () => {
+  if (!values || values.length === 0) return alert("Carrega o histórico primeiro.");
+  const pred = generatePrediction();
+  if (!pred) return alert("Não foi possível gerar palpite.");
+  const hora = new Date().toLocaleTimeString('pt-PT', { hour12:false });
+  currentPrediction = { hora, value: pred.value, category: pred.category };
+  palpiteText.innerHTML = `<strong>${hora}</strong> — Palpite: <span style="color:#ffd">${pred.value}x</span> (${pred.category})`;
+  palpiteBox.classList.remove("hidden");
+  manualRealBox.classList.add("hidden");
+  // append pending to historyLog
+  historyLog.unshift({ hora, palpite: pred.value, category: pred.category, result: "Pendente" });
+  historyLog = historyLog.slice(0, 500);
+  saveJSON("pw_history_log_v3", historyLog);
+  renderHistoryLog();
+  // stats: increment generated count
+  stats.total = (stats.total || 0) + 1;
+  saveJSON(STORAGE_KEY_STATS, stats);
+  renderStats();
+});
+
+// Confirm Right
+confirmRight.addEventListener("click", () => {
+  if (!currentPrediction) return alert("Nenhum palpite pendente.");
+  // mark last pending
+  const p = historyLog.find(h => h.result === "Pendente");
+  if (p) p.result = "✅ Acertou";
+  // reinforce: add slightly the palpite value to values to increase weight
+  values.push(Number(currentPrediction.value));
+  if (values.length > MAX_KEEP) values = values.slice(-MAX_KEEP);
+  saveJSON(STORAGE_KEY_VALUES, values);
+  stats.right = (stats.right || 0) + 1;
+  saveJSON(STORAGE_KEY_STATS, stats);
+  renderAll();
+  alert("✅ Marcado como acerto. Obrigado!");
+  currentPrediction = null;
+  palpiteBox.classList.add("hidden");
+});
+
+// Confirm Wrong -> show input
+confirmWrong.addEventListener("click", () => {
+  if (!currentPrediction) return alert("Nenhum palpite pendente.");
+  manualRealBox.classList.remove("hidden");
+  realInput.value = "";
+});
+
+submitReal.addEventListener("click", () => {
+  const n = parseNumberRaw(realInput.value);
+  if (isNaN(n) || n < MIN_VAL || n > MAX_VAL) return alert("Valor real inválido.");
+  // update last pending
+  const p = historyLog.find(h => h.result === "Pendente");
+  if (p) p.result = `❌ Errou → real ${Number(n.toFixed(2))}x`;
+  // learning: add real to values (stronger reinforcement)
+  values.push(Number(n.toFixed(2)));
+  // capacity
+  if (values.length > MAX_KEEP) values = values.slice(-MAX_KEEP);
+  saveJSON(STORAGE_KEY_VALUES, values);
+  stats.wrong = (stats.wrong || 0) + 1;
+  saveJSON(STORAGE_KEY_STATS, stats);
+  renderAll();
+  alert("🔧 Valor real registrado. Obrigado!");
+  manualRealBox.classList.add("hidden");
+  palpiteBox.classList.add("hidden");
+  currentPrediction = null;
+});
+
+// Export / Import JSON
+$("downloadBtn").addEventListener("click", () => {
+  const data = { values, stats, historyLog };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'aviator-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$("importBtn").addEventListener("click", () => {
+  const text = prompt("Cole aqui o JSON para importar (values e/ou stats).");
+  if (!text) return;
   try {
-    const worker = Tesseract.createWorker({
-      logger: m => {
-        if (m.status === "recognizing text") {
-          resultadosDiv.innerText = `📖 Lendo texto... ${Math.round(m.progress * 100)}%`;
-        }
-      }
-    });
-    await worker.load();
-    await worker.loadLanguage('eng');
-    await worker.initialize('eng');
-    const { data } = await worker.recognize(file);
-    await worker.terminate();
-
-    const text = (data && data.text) ? data.text : "";
-    resultadosDiv.innerHTML = `<pre style="white-space:pre-wrap;color:#ffd;padding:6px">${escapeHtml(text)}</pre>`;
-
-    // Extract numbers - improved regex: matches things like 1.23, 1,23, 10x, 2x
-    const rawMatches = text.match(/(\d{1,4}(?:[.,]\d+)?)(?:\s*[xX])?/g);
-    const nums = [];
-    if (rawMatches && rawMatches.length) {
-      for (let raw of rawMatches) {
-        let n = toNumberRaw(raw);
-        if (isFinite(n) && n >= MIN_VALUE && n <= MAX_VALUE) {
-          nums.push(Number(n.toFixed(2)));
-        }
-      }
-    }
-
-    // de-duplicate adjacent duplicates (OCR often repeats same number many times)
-    const filtered = [];
-    for (let v of nums) {
-      if (filtered.length === 0 || Math.abs(filtered[filtered.length - 1] - v) > 0.001) filtered.push(v);
-    }
-
-    if (filtered.length === 0) {
-      resultadosDiv.innerHTML += `\n\n⚠️ Nenhum número plausível detectado. Podes editar manualmente abaixo.`;
-      parsedValues = parsedValues || [];
-    } else {
-      // merge with existing parsedValues (append new)
-      parsedValues = parsedValues.concat(filtered).slice(-MAX_KEEP);
-      saveValues(parsedValues);
-      resultadosDiv.innerHTML += `\n\n✅ ${filtered.length} valores lidos e adicionados ao histórico local.`;
-    }
-
-    renderParsedValues();
-  } catch (err) {
-    console.error("OCR error:", err);
-    resultadosDiv.innerHTML = `❌ Erro no OCR: ${err.message || err}`;
+    const obj = JSON.parse(text);
+    if (Array.isArray(obj.values)) { values = obj.values.concat(values).slice(-MAX_KEEP); saveJSON(STORAGE_KEY_VALUES, values); }
+    if (obj.stats) { stats = obj.stats; saveJSON(STORAGE_KEY_STATS, stats); }
+    if (Array.isArray(obj.historyLog)) { historyLog = obj.historyLog.concat(historyLog).slice(0,500); saveJSON("pw_history_log_v3", historyLog); }
+    renderAll();
+    alert("✅ Importado.");
+  } catch (e) {
+    alert("JSON inválido.");
   }
-}
+});
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-}
-
-/* -------------- Prediction logic ------------- */
-// classify
-function classify(v) {
-  if (v >= 10) return "vermelho";
-  if (v >= 2) return "lilas";
-  return "azul";
-}
-
-function generatePrediction() {
-  if (!parsedValues || parsedValues.length === 0) {
-    alert("Sem histórico carregado. Carrega a imagem ou adiciona valores manualmente.");
-    return null;
-  }
-
-  // consider last RECENT_MAX values
-  const recent = parsedValues.slice(-RECENT_MAX);
+// -------- Predictor core ----------
+function generatePrediction(){
+  // use last RECENT_MAX values
+  const recent = values.slice(-RECENT_MAX);
+  if (!recent.length) return null;
   const n = recent.length;
   const weights = recencyWeights(n, 0.08);
 
-  // accumulate weights per category
-  let sumAzul=0, sumLilas=0, sumVerm=0;
-  const valsAzul = [], valsLilas = [], valsVerm = [];
-  for (let i=0;i<n;i++) {
+  // split categories
+  let valsAzul = [], valsLilas = [], valsVerm = [];
+  let sumAz=0,sumLi=0,sumVe=0;
+  for (let i=0;i<n;i++){
     const v = recent[i];
     const w = weights[i] || 1;
-    if (v < 2) { sumAzul += w; valsAzul.push({v,w}); }
-    else if (v < 10) { sumLilas += w; valsLilas.push({v,w}); }
-    else { sumVerm += w; valsVerm.push({v,w}); }
+    if (v < 2) { sumAz += w; valsAzul.push({v,w}); }
+    else if (v < 10) { sumLi += w; valsLilas.push({v,w}); }
+    else { sumVe += w; valsVerm.push({v,w}); }
   }
 
-  // choose category by relative weight (with small smoothing)
+  // pick category by weight with smoothing
   let chosen = 'lilas';
-  if (sumVerm > sumLilas * 1.05 && sumVerm > sumAzul) chosen = 'vermelho';
-  else if (sumAzul > sumLilas * 1.05 && sumAzul > sumVerm) chosen = 'azul';
+  if (sumVe > sumLi * 1.05 && sumVe > sumAz) chosen = 'vermelho';
+  else if (sumAz > sumLi * 1.05 && sumAz > sumVe) chosen = 'azul';
   else chosen = 'lilas';
 
-  // choose quantile depending on category
-  function getWeightedQ(arr, q) {
-    if (!arr.length) return null;
-    const vals = arr.map(x=>x.v);
-    const ws = arr.map(x=>x.w);
-    return weightedQuantile(vals, ws, q);
-  }
-
+  // compute base using weighted quantile appropriate for category
+  function wqFromArr(arr, q){ if (!arr.length) return null; return weightedQuantile(arr.map(x=>x.v), arr.map(x=>x.w), q); }
   let base = null;
-  if (chosen === 'vermelho') {
-    base = getWeightedQ(valsVerm, 0.8) || Math.max(...recent);
-  } else if (chosen === 'lilas') {
-    base = getWeightedQ(valsLilas, 0.6) || weightedQuantile(recent, weights, 0.6);
-  } else {
-    base = getWeightedQ(valsAzul, 0.5) || weightedQuantile(recent, weights, 0.4);
-  }
+  if (chosen === 'vermelho') base = wqFromArr(valsVerm, 0.75) || Math.max(...recent);
+  else if (chosen === 'lilas') base = wqFromArr(valsLilas, 0.6) || weightedQuantile(recent, weights, 0.6);
+  else base = wqFromArr(valsAzul, 0.5) || weightedQuantile(recent, weights, 0.45);
 
   if (!base || !isFinite(base)) base = weightedQuantile(recent, weights, 0.6) || 2.5;
 
-  // small jitter/probabilistic error to avoid 100% deterministic
-  const jitter = (Math.random()*2 - 1) * 0.02; // ±2%
-  const predicted = clamp(base * (1 + jitter), MIN_VALUE, MAX_VALUE);
+  // adapt conservativeness based on current measured precision: if our precision measured is below target, be more conservative
+  const measuredPrec = (stats.total && stats.total>0) ? ( (stats.right||0) / stats.total ) : TARGET_PRECISION;
+  // if measuredPrec < target -> reduce variance (narrow around a higher quantile) to increase safe predictions
+  const safetyFactor = clamp(1 + (TARGET_PRECISION - measuredPrec) * 2.5, 0.5, 3); // >1 -> be more conservative
+  // compute jitter magnitude small
+  const jitterPct = 0.02 / safetyFactor; // smaller jitter if less precise we want to be conservative
+
+  const jitter = (Math.random()*2 - 1) * jitterPct;
+  const predicted = clamp(base * (1 + jitter), MIN_VAL, MAX_VAL);
 
   return { value: Number(predicted.toFixed(2)), category: chosen };
 }
 
-/* ------------- History & UI --------------- */
-function pushHistoryEntry(entry) {
-  history.unshift(entry);
-  if (history.length > 200) history.pop();
-  renderHistory();
+// -------- Render helpers ----------
+function renderAll(){
+  renderValues();
+  renderHistoryLog();
+  renderStats();
+  renderCurrentInfo();
 }
-
-function renderHistory() {
-  // find table or create inside resultadosDiv
-  let t = document.getElementById("pw_hist_table");
-  if (!t) {
-    t = document.createElement("table");
-    t.id = "pw_hist_table";
-    t.style.width = "100%";
-    t.style.marginTop = "12px";
-    t.innerHTML = `<thead><tr><th>#</th><th>Hora</th><th>Palpite</th><th>Resultado</th></tr></thead><tbody></tbody>`;
-    resultadosDiv.appendChild(t);
-  }
-  const tbody = t.querySelector("tbody");
-  tbody.innerHTML = "";
-  history.forEach((h, i) => {
-    const row = document.createElement("tr");
-    row.style.borderTop = "1px solid rgba(255,255,255,0.04)";
-    row.innerHTML = `<td>${i+1}</td><td>${h.hora}</td><td>${h.palpite}x (${h.category})</td><td>${h.resultado || "Pendente"}</td>`;
-    tbody.appendChild(row);
-  });
-}
-
-/* --------------- Learning --------------- */
-// when user provides real value (after error), add to parsedValues and save
-function handleUserRealValue(real) {
-  const n = Number(real);
-  if (!isFinite(n) || n < MIN_VALUE || n > MAX_VALUE) {
-    alert("Valor inválido");
+function renderValues(){
+  if (!values || values.length === 0) {
+    histList.innerText = "Nenhum valor.";
+    loadedInfo.innerText = "Nenhum histórico carregado.";
     return;
   }
-  parsedValues.push(Number(n.toFixed(2)));
-  if (parsedValues.length > MAX_KEEP) parsedValues = parsedValues.slice(-MAX_KEEP);
-  saveValues(parsedValues);
-  renderParsedValues();
-  // update last pending history entry
-  const pend = history.find(h => h.resultado === "Pendente");
-  if (pend) {
-    pend.resultado = `Errou → real ${n}x`;
-    pend.real = n;
-    renderHistory();
-  }
+  loadedInfo.innerText = `Últimos ${Math.min(values.length, 200)} valores (mais recentes no topo).`;
+  histList.innerHTML = values.slice().reverse().map(v=>`<div>${v}x</div>`).join("");
+}
+function renderHistoryLog(){
+  const tbody = historyLog.slice(0,50); // show latest 50
+  const html = tbody.map((h,i)=>`<div style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.03)">${i+1}. ${h.hora} — ${h.palpite}x (${h.category}) — ${h.result}</div>`).join("");
+  const node = $("historyList");
+  node.innerHTML = html || "<div>Nenhum palpite gerado ainda.</div>";
+}
+function renderStats(){
+  stat_total.innerText = stats.total || 0;
+  stat_right.innerText = stats.right || 0;
+  stat_wrong.innerText = stats.wrong || 0;
+  const p = (stats.total && stats.total>0) ? ((stats.right||0)/stats.total)*100 : 0;
+  stat_prec.innerText = `${p.toFixed(1)}%`;
+}
+function renderCurrentInfo(){
+  // placeholder
 }
 
-/* ---------------- DOM bindings ---------------- */
-(function bind() {
-  // upload input + button (index.html must have file input and button wired)
-  const fileInput = document.querySelector('#imageInput');
-  const uploadBtn = document.querySelector('#uploadBtn');
-  const generateBtn = document.querySelector('#generateBtn');
-  const acertouBtn = document.querySelector('#acertouBtn');
-  const errouBtn = document.querySelector('#errouBtn');
-
-  if (uploadBtn && fileInput) {
-    uploadBtn.addEventListener('click', () => {
-      const f = fileInput.files[0];
-      if (!f) return alert('Selecione uma imagem primeiro');
-      processImageFile(f);
-    });
-  }
-
-  if (generateBtn) {
-    generateBtn.addEventListener('click', () => {
-      if (!parsedValues || parsedValues.length === 0) {
-        return alert('Carrega um histórico primeiro (ou adicione valores manualmente).');
-      }
-      const pred = generatePrediction();
-      if (!pred) return alert('Não foi possível gerar palpite.');
-      const hora = new Date().toLocaleTimeString('pt-PT', { hour12:false });
-      pushHistoryEntry({ hora, palpite: pred.value, category: pred.category, resultado: 'Pendente' });
-      // show in top area if exists
-      const display = el('palpiteDisplay');
-      if (display) display.innerHTML = `<strong>🕒 ${hora}</strong> — Palpite: <span style="color:#ffd">${pred.value}x</span> (${pred.category})`;
-      else {
-        // fallback: append small notice
-        resultadosDiv.insertAdjacentHTML('afterbegin', `<div style="color:#ffd;margin-bottom:8px">🕒 ${hora} — Palpite: ${pred.value}x (${pred.category})</div>`);
-      }
-    });
-  }
-
-  if (acertouBtn) {
-    acertouBtn.addEventListener('click', () => {
-      const pend = history.find(h => h.resultado === "Pendente");
-      if (!pend) return alert('Nenhum palpite pendente para marcar.');
-      pend.resultado = "✅ Acertou";
-      // optional: reinforce by adding same value to parsedValues (slightly)
-      parsedValues.push(Number(pend.palpite.toFixed ? pend.palpite : Number(pend.palpite)));
-      saveValues(parsedValues);
-      renderHistory();
-      renderParsedValues();
-    });
-  }
-
-  if (errouBtn) {
-    errouBtn.addEventListener('click', () => {
-      // show prompt to input real value
-      const val = prompt('Insira o valor real (onde o avião parou), ex: 2.35');
-      if (val === null) return;
-      const n = toNumberRaw(val);
-      if (!isFinite(n)) return alert('Valor inválido.');
-      handleUserRealValue(n);
-    });
-  }
-
-  // initial render
-  renderParsedValues();
-  renderHistory();
-})();
-
-/* --------------- end ---------------- */
+// initial render
+renderAll();
