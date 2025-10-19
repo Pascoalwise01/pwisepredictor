@@ -3,46 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Pascoal Wise Predictor</title>
+  <title>BacBo Predictor — Pascoal Wise</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="title">✈️ Pascoal Wise Predictor</div>
-    <div class="link">
-      <a href="https://games.elephantbet.co.ao/LaunchGame" target="_blank" rel="noopener">Abrir Aviator ElephantBet</a>
+    <div class="title">🎯 BacBo Predictor — Pascoal Wise</div>
+    <div class="actions">
+      <a class="playlink" href="https://games.elephantbet.co.ao/LaunchGame" target="_blank" rel="noopener">Jogar no ElephantBet</a>
     </div>
   </header>
 
-  <main class="wrap">
-    <!-- MANUAL HISTORY INPUT -->
-    <section class="card" id="cardHistory">
-      <h2>📥 Histórico (manual)</h2>
-      <p class="muted">Cole valores (um por linha) ou adicione individualmente. Use pontos (ex: 2.34).</p>
+  <main class="container">
+    <section class="card">
+      <h2>📥 Inserir histórico (manual)</h2>
+      <p class="muted">Cole resultados (uma letra por linha: <strong>P</strong> = Player, <strong>B</strong> = Banker, <strong>T</strong> = Tie) ou adicione manualmente.</p>
 
-      <textarea id="historyTextarea" placeholder="Ex: 1.23&#10;2.05&#10;10.26" rows="6"></textarea>
+      <textarea id="historyTextarea" placeholder="P&#10;B&#10;P&#10;T"></textarea>
 
       <div class="row">
         <button id="loadHistoryBtn">Carregar histórico</button>
-        <input id="singleValue" type="number" step="0.01" placeholder="Adicionar valor (ex: 2.05)" />
+        <select id="quickSelect">
+          <option value="P">Player (P)</option>
+          <option value="B">Banker (B)</option>
+          <option value="T">Tie (T)</option>
+        </select>
         <button id="addSingleBtn">Adicionar</button>
         <button id="clearHistoryBtn" class="warn">Limpar</button>
       </div>
 
-      <div id="loadedInfo" class="info">Nenhum histórico carregado.</div>
+      <div id="loadedInfo" class="info">Nenhum histórico carregado (sessionStorage).</div>
     </section>
 
-    <!-- PREDICTOR -->
-    <section class="card" id="cardPredict">
-      <h2>🎯 Gerar Palpite</h2>
-      <p class="muted">Gera palpite com base no histórico. O palpite é um número exato com 2 casas decimais.</p>
+    <section class="card">
+      <h2>🎯 Gerar Previsão</h2>
+      <p class="muted">Analisa o histórico e gera a previsão mais provável para a próxima rodada.</p>
 
       <div class="center">
-        <button id="generateBtn" class="primary">Gerar Palpite</button>
+        <button id="generateBtn" class="primary">Gerar Previsão</button>
       </div>
 
-      <div id="palpiteBox" class="palpiteBox hidden">
-        <div id="palpiteText" class="palpiteText">—</div>
+      <div id="predictionBox" class="predictionBox hidden">
+        <div id="predictionText" class="predictionText">—</div>
 
         <div class="feedbackRow">
           <button id="confirmRight" class="ok">✅ Acertou</button>
@@ -50,10 +52,13 @@
         </div>
       </div>
 
-      <div id="manualRealBox" class="hidden">
-        <p>Informe o valor real que caiu (ex: 10.26):</p>
-        <input id="realInput" type="number" step="0.01" placeholder="Ex: 2.35" />
-        <button id="submitReal">Enviar valor real</button>
+      <div id="manualRealBox" class="manualRealBox hidden">
+        <p>Se errou, selecione o resultado real que ocorreu:</p>
+        <div class="row">
+          <button class="realBtn" data-val="P">Player (P)</button>
+          <button class="realBtn" data-val="B">Banker (B)</button>
+          <button class="realBtn" data-val="T">Tie (T)</button>
+        </div>
       </div>
 
       <div class="stats">
@@ -69,22 +74,20 @@
       </div>
     </section>
 
-    <!-- HISTORY VISUAL -->
     <section class="card">
-      <h2>🔎 Histórico (últimos valores)</h2>
-      <div id="historyList" class="historyList">Nenhum valor.</div>
+      <h2>🔎 Visual do histórico (últimos 200)</h2>
+      <div id="historyGrid" class="historyGrid">Nenhum valor.</div>
       <div class="row" style="margin-top:8px;">
-        <button id="downloadBtn">Exportar (JSON)</button>
+        <button id="exportBtn">Exportar JSON</button>
         <button id="importBtn">Importar JSON</button>
       </div>
     </section>
-
   </main>
 
   <footer class="footer">
-    <p>© 2025 Pascoal Wise — Made by Pascoal Wise</p>
+    <p>© 2025 Pascoal Wise — BacBo Predictor</p>
   </footer>
 
   <script src="script.js"></script>
 </body>
-</html>
+  </html>
