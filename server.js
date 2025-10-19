@@ -1,3 +1,4 @@
+// server.js - simple static file server for the predictor
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,5 +16,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`BacBo Predictor server running on port ${PORT}`);
 });
