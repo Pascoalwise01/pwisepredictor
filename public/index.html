@@ -1,65 +1,100 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bac Bo Predictor — Pascoal Wise</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BacBo Predictor — Pascoal Wise</title>
   <link rel="icon" href="https://games.elephantbet.co.ao/favicon.ico" />
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-  <div class="container">
-    <header>
-      <h1 class="title">🎲 Bac Bo Predictor</h1>
-      <p class="subtitle">by <strong>Pascoal Wise</strong></p>
-      <a class="play-link" href="https://games.elephantbet.co.ao/LaunchGame" target="_blank">
-        🎮 Jogar Bac Bo na ElephantBet
-      </a>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>🎲 BacBo Predictor</h1>
+        <p class="by">by <strong>Pascoal Wise</strong></p>
+      </div>
+      <a class="playlink" href="https://games.elephantbet.co.ao/LaunchGame" target="_blank" rel="noopener">🎮 Jogar no ElephantBet</a>
     </header>
 
-    <main>
-      <!-- Botão principal -->
-      <button id="generateBtn" class="btn-generate">🔮 Gerar Palpite</button>
+    <main class="main">
+      <section class="card">
+        <h2>📥 Histórico (manual)</h2>
+        <p class="muted">Cole resultados (uma letra por linha): <strong>P</strong> = Player, <strong>B</strong> = Banker, <strong>T</strong> = Tie</p>
+        <textarea id="historyTextarea" placeholder="P&#10;B&#10;P&#10;T"></textarea>
 
-      <!-- Caixa do palpite -->
-      <div id="predictionBox" class="box hidden">
-        <p id="predictionText" class="prediction-text"></p>
-        <div class="feedback">
-          <button id="confirmRight" class="btn success">✅ Acertou</button>
-          <button id="confirmWrong" class="btn danger">❌ Errou</button>
+        <div class="row">
+          <button id="loadHistoryBtn" class="btn">Carregar histórico</button>
+          <select id="quickSelect" class="select">
+            <option value="P">Player (P)</option>
+            <option value="B">Banker (B)</option>
+            <option value="T">Tie (T)</option>
+          </select>
+          <button id="addSingleBtn" class="btn">Adicionar</button>
+          <button id="clearHistoryBtn" class="btn warn">Limpar</button>
         </div>
-      </div>
 
-      <!-- Caixa para corrigir o resultado real -->
-      <div id="manualRealBox" class="box hidden">
-        <p>Selecione o resultado real:</p>
-        <div class="manual-options">
-          <button class="btn realBtn" data-val="PLAYER">🔵 Player</button>
-          <button class="btn realBtn" data-val="BANKER">🔴 Banker</button>
-          <button class="btn realBtn" data-val="TIE">🟡 Empate</button>
-        </div>
-      </div>
-
-      <!-- Histórico -->
-      <section class="history-section">
-        <h2>Histórico recente</h2>
-        <div id="historyContainer" class="history-grid"></div>
+        <div id="loadedInfo" class="info">Nenhum histórico carregado (session).</div>
       </section>
 
-      <!-- Estatísticas -->
-      <section class="stats-section">
-        <p id="statsBox">🎯 0% de precisão</p>
+      <section class="card">
+        <h2>🎯 Gerar Previsão</h2>
+        <p class="muted">Clica para gerar o próximo palpite com base no histórico carregado.</p>
+
+        <div class="center">
+          <button id="generateBtn" class="btn primary">Gerar Previsão</button>
+        </div>
+
+        <div id="predictionBox" class="predictionBox hidden">
+          <div id="predictionText" class="predictionText">—</div>
+          <div class="feedbackRow">
+            <button id="confirmRight" class="btn ok" disabled>✅ Acertou</button>
+            <button id="confirmWrong" class="btn bad" disabled>❌ Errou</button>
+          </div>
+        </div>
+
+        <div id="manualRealBox" class="manualRealBox hidden">
+          <p>Se errou — selecione o resultado real:</p>
+          <div class="row">
+            <button class="btn realBtn" data-val="P">🔵 Player</button>
+            <button class="btn realBtn" data-val="B">🔴 Banker</button>
+            <button class="btn realBtn" data-val="T">🟡 Tie</button>
+          </div>
+        </div>
+
+        <div class="stats">
+          <table>
+            <tr><th>Gerados</th><th>Acertos</th><th>Erros</th><th>Precisão</th></tr>
+            <tr>
+              <td id="stat_total">0</td>
+              <td id="stat_right">0</td>
+              <td id="stat_wrong">0</td>
+              <td id="stat_prec">0%</td>
+            </tr>
+          </table>
+        </div>
       </section>
 
-      <!-- Log -->
-      <section class="log-section">
-        <h3>📜 Registo</h3>
-        <div id="logArea" class="log-area"></div>
+      <section class="card">
+        <h2>🔎 Histórico visual (últimos)</h2>
+        <div id="historyGrid" class="historyGrid">Nenhum valor.</div>
+        <div class="row" style="margin-top:8px;">
+          <button id="exportBtn" class="btn">Exportar JSON</button>
+          <button id="importBtn" class="btn">Importar JSON</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>📜 Registo</h2>
+        <div id="logArea" class="logArea"></div>
       </section>
     </main>
+
+    <footer class="footer">
+      <p>© 2025 Pascoal Wise — BacBo Predictor</p>
+    </footer>
   </div>
 
   <script src="script.js"></script>
 </body>
-          </html>
+  </html>
