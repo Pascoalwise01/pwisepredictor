@@ -1,7 +1,7 @@
 {
-  "name": "aviator-pascoalwise",
+  "name": "bacbo-predictor",
   "version": "1.0.0",
-  "description": "Pascoal Wise Predictor - manual-history, KDE-based predictor",
+  "description": "Predictor for Bac Bo (ElephantBet) - manual history + lightweight learning",
   "main": "server.js",
   "type": "module",
   "scripts": {
