@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bac Bo Predictor - ElephantBet</title>
+  <title>Bac Bo Predictor</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,21 +12,21 @@
 
     <div class="history-section">
       <h3>Histórico</h3>
-      <textarea id="historyInput" placeholder="Digite o histórico: Player, Banker ou Tie (um por linha)"></textarea>
+      <textarea id="historyInput" placeholder="Digite o histórico manualmente (um por linha): Player, Banker, Tie"></textarea>
       <button id="loadHistory">Carregar Histórico</button>
     </div>
 
-    <div class="predict-section">
-      <button id="generate">🎲 Gerar Palpite</button>
+    <div class="prediction-section">
+      <button id="generate">Gerar Palpite</button>
       <div id="prediction" class="prediction"></div>
     </div>
 
-    <div class="feedback-section">
-      <button id="correct" class="correct">✅ Acertou</button>
-      <button id="wrong" class="wrong">❌ Errou</button>
+    <div class="feedback">
+      <button id="correct" class="correct">Acertou ✅</button>
+      <button id="wrong" class="wrong">Errou ❌</button>
     </div>
 
-    <div class="stored-history">
+    <div class="history-display">
       <h3>Histórico Atual</h3>
       <ul id="historyList"></ul>
     </div>
